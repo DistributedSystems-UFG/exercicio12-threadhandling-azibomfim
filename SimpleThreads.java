@@ -1,6 +1,5 @@
 public class SimpleThreads {
 
-    // Display a message, preceded by the name of the current thread
     static void threadMessage(String message) {
         String threadName = Thread.currentThread().getName();
         System.out.format("%s: %s%n", threadName, message);
@@ -17,9 +16,7 @@ public class SimpleThreads {
             };
             try {
                 for (int i = 0; i < importantInfo.length; i++) {
-                    // Pause for 4 seconds
                     Thread.sleep(4000);
-                    // Print a message
                     threadMessage(importantInfo[i]);
                 }
             } catch (InterruptedException e) {
@@ -28,13 +25,51 @@ public class SimpleThreads {
         }
     }
 
+    private static class CpuIntensiveTask implements Runnable {
+        private final int limit;
+
+        CpuIntensiveTask(int limit) {
+            this.limit = limit;
+        }
+
+        public void run() {
+            threadMessage("Starting CPU-intensive prime computation up to " + limit);
+            long sum = 0;
+            int count = 0;
+
+            for (int n = 2; n <= limit; n++) {
+                if (Thread.interrupted()) {
+                    threadMessage("CPU task interrupted! Computed " + count
+                            + " primes so far (partial sum = " + sum + ").");
+                    return;
+                }
+
+                if (isPrime(n)) {
+                    sum += n;
+                    count++;
+                }
+            }
+
+            threadMessage("CPU task done! Found " + count
+                    + " primes up to " + limit + " (sum = " + sum + ").");
+        }
+
+        private boolean isPrime(int n) {
+            if (n < 2) return false;
+            if (n == 2) return true;
+            if (n % 2 == 0) return false;
+            for (int i = 3; (long) i * i <= n; i += 2) {
+                if (n % i == 0) return false;
+            }
+            return true;
+        }
+    }
+
     public static void main(String args[])
         throws InterruptedException {
 
-        // Delay, in milliseconds before we interrupt MessageLoop thread (default one hour)
         long patience = 1000 * 60 * 60;
 
-        // If command line argument present, gives patience in seconds
         if (args.length > 0) {
             try {
                 patience = Long.parseLong(args[0]) * 1000;
@@ -48,24 +83,37 @@ public class SimpleThreads {
         long startTime = System.currentTimeMillis();
         Thread t = new Thread(new MessageLoop());
 
-	// Put the MessageLoop thread to run
         t.start();
 
         threadMessage("Waiting for MessageLoop thread to finish");
-	
-        // loop until MessageLoop thread exits
+
         while (t.isAlive()) {
             threadMessage("Still waiting...");
-            // Wait maximum of 1 second for MessageLoop thread to finish
             t.join(1000);
             if (((System.currentTimeMillis() - startTime) > patience) && t.isAlive()) {
                 threadMessage("Tired of waiting!");
-		// Force the interruption of the MainLoop thread
                 t.interrupt();
-                // ...and wait for it to finish -- shouldn't be long now 
                 t.join();
             }
         }
         threadMessage("Finally!");
+
+        long cpuPatience = patience;
+        threadMessage("Starting CPU-intensive thread (limit = 5000000, patience = "
+                + cpuPatience + " ms)");
+        long cpuStart = System.currentTimeMillis();
+        Thread cpuThread = new Thread(new CpuIntensiveTask(5_000_000), "CpuTask");
+        cpuThread.start();
+
+        while (cpuThread.isAlive()) {
+            threadMessage("CPU thread still running...");
+            cpuThread.join(1000);
+            if (((System.currentTimeMillis() - cpuStart) > cpuPatience) && cpuThread.isAlive()) {
+                threadMessage("CPU task is taking too long — interrupting!");
+                cpuThread.interrupt();
+                cpuThread.join();
+            }
+        }
+        threadMessage("CPU thread finished.");
     }
 }
